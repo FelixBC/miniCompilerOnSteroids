@@ -61,6 +61,31 @@ También se probó la traducción a PHP, validando que:
 
 ---
 
+⚠️ Limitaciones del Mini Compilador
+Como este es un compilador mini desarrollado con fines educativos, existen ciertas limitaciones que pueden causar que algunos errores reales no sean detectados, o que ciertos comportamientos no se manejen como lo haría un compilador profesional. A continuación, algunas de estas limitaciones:
+
+❌ No hay verificación de tipos entre variables (por ejemplo, sumar texto y número no lanza error).
+
+❌ No detecta variables duplicadas ni errores de ámbito (scope).
+
+❌ El análisis sintáctico es limitado, no usa una gramática formal completa.
+
+❌ No existe un análisis semántico profundo (solo validaciones mínimas).
+
+❌ No hay control de flujo detallado, como manejo de break, continue, return en distintos contextos.
+
+❌ No soporta estructuras complejas como objetos, clases o funciones flecha.
+
+⚠️ La traducción a PHP o C es básica, usando reemplazos simples que no garantizan código ejecutable.
+
+⚠️ La ejecución de JavaScript usa eval, lo cual no aísla ni valida la seguridad del código.
+
+❌ Los errores léxicos solo detectan símbolos ilegales, no todos los errores posibles del lenguaje.
+
+❌ No hay gestión de memoria, optimización de código, ni generación real de binarios.
+
+A pesar de estas limitaciones, este mini compilador cumple con los objetivos académicos y sirve como una excelente base para seguir aprendiendo y desarrollando funcionalidades más avanzadas.
+
 ## 👨‍💻 Autor
 
 - **Nombre:** Félix José Blanco Cabrera  
