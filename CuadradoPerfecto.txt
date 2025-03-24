@@ -1,0 +1,19 @@
+// Función para comprobar si un número es un cuadrado perfecto
+function esCuadradoPerfecto(num) {
+    const raiz = Math.sqrt(num);
+    return Number.isInteger(raiz);
+}
+
+// Función para obtener todos los cuadrados perfectos en un rango dado
+function obtenerCuadradosPerfectos(hasta) {
+    const cuadrados = [];
+    for (let i = 1; i * i <= hasta; i++) {
+        cuadrados.push(i * i);
+    }
+    return cuadrados;
+}
+
+// Ejecutar
+const rango = 100;
+const cuadradosPerfectos = obtenerCuadradosPerfectos(rango);
+cuadradosPerfectos;
