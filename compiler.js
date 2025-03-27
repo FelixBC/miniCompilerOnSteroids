@@ -49,7 +49,7 @@ function analyzeCode() {
     const code = document.getElementById('sourceCode').value;
 
     // Análisis Léxico
-    const { tokens, errors: lexicalErrors } = lexicalAnalysis(code);
+    const {tokens, errors: lexicalErrors} = lexicalAnalysis(code);
     displaySymbolTable(tokens);
 
     // Análisis Sintáctico y Semántico
@@ -233,14 +233,17 @@ function semanticAnalysis(ast) {
 
 function lexicalAnalysis(code) {
     const tokenDefs = [
-        { type: 'COMMENT', regex: /^\/\/.*/, ignore: true },
-        { type: 'STRING', regex: /^"(?:[^"\\]|\\.)*"/ },
-        { type: 'STRING', regex: /^'(?:[^'\\]|\\.)*'/ },
-        { type: 'NUMBER', regex: /^\d+(\.\d+)?/ },
-        { type: 'IDENTIFIER', regex: /^[\p{L}_][\p{L}0-9_]*/u },
-        { type: 'OPERATOR', regex: /^(==|!=|<=|>=|\+\+|--|[+\-*/=<>])/ },
-        { type: 'DELIMITER', regex: /^[().,;{}[\]]/ },
-        { type: 'WHITESPACE', regex: /^\s+/, ignore: true }
+        {type: 'COMMENT', regex: /^\/\/.*/, ignore: true},
+        {type: 'STRING', regex: /^"(?:[^"\\]|\\.)*"/},
+        {type: 'STRING', regex: /^'(?:[^'\\]|\\.)*'/},
+        {type: 'NUMBER', regex: /^\d+(\.\d+)?/},
+        {type: 'IDENTIFIER', regex: /^[\p{L}_][\p{L}0-9_]*/u},
+        {
+            type: 'OPERATOR',
+            regex: /^(===|!==|==|!=|<=|>=|\+\+|--|[+\-*/=<>])/
+        },
+        {type: 'DELIMITER', regex: /^[().,;{}[\]]/},
+        {type: 'WHITESPACE', regex: /^\s+/, ignore: true}
     ];
 
     const lines = code.split('\n');
@@ -282,7 +285,7 @@ function lexicalAnalysis(code) {
         }
     });
 
-    return { tokens, errors };
+    return {tokens, errors};
 }
 
 //  I'm letting this commented, in case you wanna do it in the future without the pegjs parser just hardcoding it to understand more of the process.
@@ -373,17 +376,23 @@ function displayErrors(errors) {
 
     if (!errors || errors.length === 0) {
         const row = document.createElement('tr');
-        row.innerHTML = `<td colspan="2">Sin errores detectados</td>`;
+        row.innerHTML = `<td colspan="3">Sin errores detectados</td>`;
         tableBody.appendChild(row);
         logToConsole("Sin errores detectados.");
         return;
     }
 
     errors.forEach(error => {
+        const lineInfo = error.line
+            ? `Línea ${error.line}${error.column ? `, Columna ${error.column}` : ''}`
+            : '';
+
         const row = document.createElement('tr');
-        row.innerHTML = `<td>${error.type}</td><td>${error.message}</td>`;
+        row.innerHTML = `<td>${error.type}</td><td>${error.message}</td><td>${lineInfo}</td>`;
         tableBody.appendChild(row);
-        logToConsole(`${error.type}: ${error.message}`, error.type === 'Sintáctico' ? 'error' : 'warning');
+
+        const logMessage = `${error.type}: ${error.message}${lineInfo ? ` (${lineInfo})` : ''}`;
+        logToConsole(logMessage, error.type === 'Sintáctico' ? 'error' : 'warning');
     });
 }
 
@@ -423,6 +432,7 @@ function translateToRuby() {
     logToConsole("Traducción a Ruby completada.", 'log');
     setStatusBar("Traducción a Ruby completada.");
 }
+
 function clearErrors() {
     const tableBody = document.getElementById('errorTable');
     if (tableBody) {

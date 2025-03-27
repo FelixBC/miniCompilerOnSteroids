@@ -117,15 +117,23 @@ WhileStatement
     }
 
 ForStatement
-  = "for" _ "(" _ init:(VariableDeclaration / Expression)? _ ";" _ test:Expression? _ ";" _ update:Expression? _ ")" _ body:Statement {
-      return {
-        type: "ForStatement",
-        init: init || null,
-        test: test || null,
-        update: update || null,
-        body: body
-      };
-    }
+  = "for" _ "(" _
+    init:(VariableDeclaration / Expression)?  -- e.g., let i = 1
+    _ ";" _
+    test:Expression?                           -- e.g., i <= hasta
+    _ ";" _
+    update:Expression?                         -- e.g., i++
+    _ ")" _
+    body:Statement                             -- the loop body (Block or single statement)
+{
+  return {
+    type: "ForStatement",
+    init: init || null,
+    test: test || null,
+    update: update || null,
+    body
+  };
+}
 
 ReturnStatement
   = "return" _ expr:Expression? _ ";" {
@@ -193,15 +201,25 @@ MultiplicativeExpression
     }
 
 UnaryExpression
-  = op:("!" / "-") _ expr:UnaryExpression {
-      return { type: "UnaryExpression", operator: op, argument: expr };
+  = op:("!" / "-" / "++" / "--") _ expr:UnaryExpression {
+      return {
+        type: (op === "++" || op === "--") ? "UpdateExpression" : "UnaryExpression",
+        operator: op,
+        argument: expr,
+        prefix: true
+      };
     }
   / PostfixExpression
 
 PostfixExpression
   = expr:LeftHandSideExpression op:("++" / "--")? {
       if (op) {
-        return { type: "UpdateExpression", operator: op, argument: expr, prefix: false };
+        return {
+          type: "UpdateExpression",
+          operator: op,
+          argument: expr,
+          prefix: false  // postfix usage, e.g. i++
+        };
       }
       return expr;
     }
@@ -237,12 +255,27 @@ ArgumentList
   = first:Expression rest:(_ "," _ Expression)* {
       return [first, ...rest.map(r => r[3])];
     }
+ArrayLiteral
+  = "[" _ elems:(Expression (_ "," _ Expression)*)? _ "]" {
+      var elements = [];
+      if (elems) {
+          // elems[0] is the first Expression
+          elements.push(elems[0]);
+          // elems[1] is an array of additional expressions, each wrapped with the comma separator pattern
+          for (var i = 0; i < elems[1].length; i++) {
+              elements.push(elems[1][i][3]);
+          }
+      }
+      return { type: "ArrayExpression", elements: elements };
+  }
 
 PrimaryExpression
-  = NumberLiteral
+  = ArrayLiteral
+  / NumberLiteral
   / StringLiteral
   / BooleanLiteral
   / NullLiteral
   / Identifier
   / "(" _ Expression _ ")" { return $3; }
+
 
