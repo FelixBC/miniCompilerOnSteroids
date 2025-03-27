@@ -2,7 +2,7 @@
 function esCapicua(num) {
     const original = num.toString();
     const invertido = original.split('').reverse().join('');
-    return original === invertido;
+    return original == invertido;
 }
 
 // Función para obtener todos los números capicúas en un rango dado

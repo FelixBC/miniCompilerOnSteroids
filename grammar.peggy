@@ -1,13 +1,13 @@
 {
-  // Any initialization code you may want
+  // You can put helper JS code here if needed
 }
 
-// Optional whitespace
+// Whitespace rule (zero or more spaces, tabs, or newlines)
 _ = [ \t\n\r]*
 
-//----------------------------
-// Program and Statements
-//----------------------------
+//=====================================
+// Program and Statement Handling
+//=====================================
 Program
   = _ stmts:StatementList? _ {
       return { type: "Program", body: stmts || [] };
@@ -39,14 +39,28 @@ Block
       return { type: "BlockStatement", body: stmts || [] };
     }
 
+//=====================================
+// Variable Declarations
+//=====================================
+
+// 1) Normal variable declaration with trailing semicolon (for standalone statements)
 VariableDeclaration
-  = kind:("let" / "const" / "var") _ name:Identifier _ "=" _ value:Expression _ ";" {
-      return { type: "VariableDeclaration", kind, name, value };
+  = kind:("let" / "const" / "var") _ id:Identifier _ "=" _ val:Expression _ ";" {
+      return { type: "VariableDeclaration", kind, name: id, value: val };
     }
 
+// 2) Special variable declaration for for-loops (NO trailing semicolon)
+ForVariableDeclaration
+  = kind:("let" / "const" / "var") _ id:Identifier _ "=" _ val:Expression {
+      return { type: "VariableDeclaration", kind, name: id, value: val };
+    }
+
+//=====================================
+// Function Declaration
+//=====================================
 FunctionDeclaration
-  = "function" _ name:Identifier _ "(" _ params:ParameterList? _ ")" _ body:Block {
-      return { type: "FunctionDeclaration", name, params: params || [], body };
+  = "function" _ id:Identifier _ "(" _ params:ParameterList? _ ")" _ body:Block {
+      return { type: "FunctionDeclaration", name: id, params: params || [], body };
     }
 
 ParameterList
@@ -54,9 +68,17 @@ ParameterList
       return [first, ...rest.map(r => r[3])];
     }
 
+//=====================================
+// Control Flow
+//=====================================
 IfStatement
-  = "if" _ "(" _ cond:Expression _ ")" _ thenStmt:Statement _ ("else" _ elseStmt:Statement)? {
-      return { type: "IfStatement", test: cond, consequent: thenStmt, alternate: arguments[7] ? arguments[7][1] : null };
+  = "if" _ "(" _ cond:Expression _ ")" _ thenStmt:Statement elsePart:(_ "else" _ elseStmt:Statement)? {
+      return {
+        type: "IfStatement",
+        test: cond,
+        consequent: thenStmt,
+        alternate: elsePart ? elsePart[2] : null
+      };
     }
 
 WhileStatement
@@ -64,11 +86,13 @@ WhileStatement
       return { type: "WhileStatement", test: cond, body };
     }
 
+// The for-loop rule references ForVariableDeclaration for init
 ForStatement
   = "for" _ "(" _
-      init:(VariableDeclaration / Expression)? _ ";" _
+      init:(ForVariableDeclaration / Expression)? _ ";" _
       test:Expression? _ ";" _
-      update:Expression? _ ")" _ body:Statement {
+      update:Expression? _ ")" _
+      body:Statement {
       return {
         type: "ForStatement",
         init: init || null,
@@ -83,14 +107,15 @@ ReturnStatement
       return { type: "ReturnStatement", argument: expr || null };
     }
 
+// Simple console.log(...) statement
 ConsoleLog
   = "console" _ "." _ "log" _ "(" _ arg:Expression _ ")" _ ";" {
       return { type: "ConsoleLog", argument: arg };
     }
 
-//----------------------------
+//=====================================
 // Expressions
-//----------------------------
+//=====================================
 Expression
   = AssignmentExpression
 
@@ -166,6 +191,7 @@ MultiplicativeExpression
 
 UnaryExpression
   = op:("!" / "-" / "++" / "--") _ expr:UnaryExpression {
+      // Handles prefix !, -, ++, or --
       return {
         type: (op === "++" || op === "--") ? "UpdateExpression" : "UnaryExpression",
         operator: op,
@@ -177,6 +203,7 @@ UnaryExpression
 
 PostfixExpression
   = expr:LeftHandSideExpression op:("++" / "--")? {
+      // Handles postfix i++, i--
       if (op) {
         return {
           type: "UpdateExpression",
@@ -188,22 +215,14 @@ PostfixExpression
       return expr;
     }
 
-PropertyAccess
-  = _ "." _ prop:Identifier {
-      return { type: "MemberExpression", object: null, property: prop, computed: false };
-    }
-
-FunctionCall
-  = _ "(" _ args:ArgumentList? _ ")" {
-      return { type: "CallExpression", arguments: args || [] };
-    }
-
 LeftHandSideExpression
   = base:PrimaryExpression suffixes:(PropertyAccess / FunctionCall)* {
       return suffixes.reduce((acc, item) => {
         if (item.type === "CallExpression") {
+          // chain calls
           return { type: "CallExpression", callee: acc, arguments: item.arguments };
         }
+        // property access
         return { type: "MemberExpression", object: acc, property: item.property, computed: false };
       }, base);
     }
@@ -218,11 +237,24 @@ MemberExpression
       }), object);
     }
 
+PropertyAccess
+  = _ "." _ prop:Identifier {
+      return { type: "MemberExpression", object: null, property: prop, computed: false };
+    }
+
+FunctionCall
+  = _ "(" _ args:ArgumentList? _ ")" {
+      return { type: "CallExpression", arguments: args || [] };
+    }
+
 ArgumentList
   = first:Expression rest:(_ "," _ Expression)* {
       return [first, ...rest.map(r => r[3])];
     }
 
+//=====================================
+// Primary Expressions
+//=====================================
 PrimaryExpression
   = ArrayLiteral
   / NumberLiteral
@@ -232,9 +264,7 @@ PrimaryExpression
   / Identifier
   / "(" _ Expression _ ")" { return $3; }
 
-//----------------------------
-// Array Literal
-//----------------------------
+// Array literal support
 ArrayLiteral
   = "[" _ elems:(Expression (_ "," _ Expression)*)? _ "]" {
       var elements = [];
@@ -245,11 +275,11 @@ ArrayLiteral
         }
       }
       return { type: "ArrayExpression", elements: elements };
-  }
+    }
 
-//----------------------------
-// Literals and Identifiers
-//----------------------------
+//=====================================
+// Literals
+//=====================================
 NumberLiteral
   = digits:[0-9]+ {
       return { type: "NumberLiteral", value: parseInt(digits.join(""), 10) };
@@ -264,17 +294,11 @@ StringLiteral
     }
 
 BooleanLiteral
-  = "true" {
-      return { type: "BooleanLiteral", value: true };
-    }
-  / "false" {
-      return { type: "BooleanLiteral", value: false };
-    }
+  = "true"  { return { type: "BooleanLiteral", value: true  }; }
+  / "false" { return { type: "BooleanLiteral", value: false }; }
 
 NullLiteral
-  = "null" {
-      return { type: "NullLiteral", value: null };
-    }
+  = "null" { return { type: "NullLiteral", value: null }; }
 
 Identifier
   = $([a-zA-Z_][a-zA-Z0-9_]*) {
