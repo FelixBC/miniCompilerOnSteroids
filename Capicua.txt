@@ -22,5 +22,6 @@ const rango = parseInt(entrada, 10);
 
 // Mostrar resultados
 const numerosCapicuas = obtenerCapicuas(rango);
-console.log("Los números capicúa son:", numerosCapicuas);
+console.log("Los números capicúa son: " + numerosCapicuas);
 numerosCapicuas;
+

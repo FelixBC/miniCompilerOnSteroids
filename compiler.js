@@ -1,79 +1,283 @@
-// Agregar eventos a los botones cuando el documento esté listo
-document.getElementById('analyze').addEventListener('click', analyzeCode);
-document.getElementById('translateToPHP').addEventListener('click', translateToPHP);
-document.getElementById('translateToC').addEventListener('click', translateToC);
-document.getElementById('open').addEventListener('click', openFile);
-document.getElementById('save').addEventListener('click', saveFile);
-document.getElementById('saveAs').addEventListener('click', saveAsFile);
-document.getElementById('clear').addEventListener('click', clearAll);
-document.getElementById('exit').addEventListener('click', exitApp);
-document.getElementById('new').addEventListener('click', newFile);
-document.getElementById('runJs').addEventListener('click', runJavaScript);
+// Conectar botones
+const connectMenuButtons = () => {
+    document.getElementById('new').addEventListener('click', newFile);
+    document.getElementById('open').addEventListener('click', openFile);
+    document.getElementById('save').addEventListener('click', saveFile);
+    document.getElementById('saveAs').addEventListener('click', saveAsFile);
+    document.getElementById('analyze').addEventListener('click', analyzeCode);
+    document.getElementById('runJs').addEventListener('click', runJavaScript);
+    document.getElementById('clear').addEventListener('click', clearAll);
+    document.getElementById('exit').addEventListener('click', exitApp);
+    document.getElementById('translateToRuby').addEventListener('click', translateToRuby);
+    document.getElementById('translateToGo').addEventListener('click', translateRubyToGo);
+};
 
-// Función para actualizar la barra de estado
+connectMenuButtons();
+
 function setStatusBar(message) {
     document.getElementById('statusBar').innerText = message;
 }
 
-// Función para registrar mensajes en la consola
-function logToConsole(message) {
+function logToConsole(message, type = 'log') {
     const consoleDiv = document.getElementById('console');
-    consoleDiv.innerText += message + '\n';
+    const now = new Date();
+    const time = now.toLocaleTimeString('es-ES', {hour12: false});
+    const prefix = `[${time}] > `;
+    const line = document.createElement('div');
+    line.textContent = prefix + message;
+
+    switch (type) {
+        case 'error':
+            line.style.color = 'red';
+            break;
+        case 'warning':
+            line.style.color = 'yellow';
+            break;
+        default:
+            line.style.color = '#00ff00';
+    }
+
+    consoleDiv.appendChild(line);
     consoleDiv.scrollTop = consoleDiv.scrollHeight;
 }
 
 function analyzeCode() {
+    clearErrors();
     setStatusBar("Analizando código...");
-    logToConsole("Inicio del análisis léxico...");
+    logToConsole("Iniciando análisis léxico y sintáctico...");
 
-    const sourceCode = document.getElementById('sourceCode').value;
+    const code = document.getElementById('sourceCode').value;
 
-    // Análisis léxico
-    const { tokens, errors: lexicalErrors } = lexicalAnalysis(sourceCode);
-    displayTokens(tokens);
+    // Análisis Léxico
+    const { tokens, errors: lexicalErrors } = lexicalAnalysis(code);
+    displaySymbolTable(tokens);
 
-    // Análisis sintáctico
-    const { parseTree, errors: syntaxErrors } = syntacticAnalysis(tokens);
+    // Análisis Sintáctico y Semántico
+    let syntaxErrors = [];
+    let semanticErrors = [];
+    let ast = null;
 
-    // Análisis semántico
-    const { errors: semanticErrors } = semanticAnalysis(parseTree);
+    try {
+        ast = parser.parse(code);
+        logToConsole("Análisis sintáctico completado.");
 
-    // Unir todos los errores
+        // Análisis Semántico
+        semanticErrors = semanticAnalysis(ast);
+        if (semanticErrors.length === 0) {
+            logToConsole("Análisis semántico completado.");
+        }
+    } catch (e) {
+        syntaxErrors.push({
+            type: "Sintáctico",
+            message: e.message,
+            line: e.location?.start?.line || null,
+            column: e.location?.start?.column || null
+        });
+    }
+
+    // Mostrar errores
     const allErrors = [...lexicalErrors, ...syntaxErrors, ...semanticErrors];
     displayErrors(allErrors);
 
-    setStatusBar("Análisis completado");
-    logToConsole("Análisis completado.");
+    // Extraer y resaltar líneas de error
+    const errorLines = allErrors
+        .map(err => err.line || (err.location?.start?.line))
+        .filter(Boolean);
+
+    highlightErrorLines(errorLines);
+
+    if (allErrors.length === 0) {
+        logToConsole("Análisis completado sin errores.");
+    } else {
+        logToConsole(`Se detectaron ${allErrors.length} error${allErrors.length > 1 ? 'es' : ''}.`);
+    }
+
+    setStatusBar("Análisis completado.");
+}
+
+function highlightErrorLines(lines) {
+    const textarea = document.getElementById("sourceCode");
+    const originalLines = textarea.value.split('\n');
+
+    const highlighted = originalLines.map((line, index) => {
+        const lineNumber = index + 1;
+        return lines.includes(lineNumber)
+            ? `⚠️ ${line}` // Prefijo visual; puedes cambiarlo por otro si lo deseas
+            : line;
+    });
+
+    textarea.value = highlighted.join('\n');
 }
 
 
+function semanticAnalysis(ast) {
+    const errors = [];
+    const symbolTable = {};
+
+    function reportError(message, node) {
+        const loc = node?.location;
+        const position = loc ? `en línea ${loc.start.line}, columna ${loc.start.column}` : '';
+        errors.push({
+            type: "Semántico",
+            message: `${message} ${position}`.trim()
+        });
+    }
+
+    function inferType(expr) {
+        if (!expr) return "unknown";
+
+        switch (expr.type) {
+            case 'NumberLiteral':
+                return 'number';
+            case 'StringLiteral':
+                return 'string';
+            case 'BooleanLiteral':
+                return 'boolean';
+            case 'NullLiteral':
+                return 'null';
+            case 'Identifier':
+                return symbolTable[expr.name] || 'unknown';
+            case 'CallExpression':
+                if (expr.callee.type === 'MemberExpression') {
+                    const objType = inferType(expr.callee.object);
+                    const method = expr.callee.property.name;
+                    if (objType === 'number' && method === 'toString') return 'string';
+                    if (objType === 'string' && method === 'toInt') return 'number';
+                }
+                return 'unknown';
+            case 'BinaryExpression':
+                const leftType = inferType(expr.left);
+                const rightType = inferType(expr.right);
+                return leftType === rightType ? leftType : 'unknown';
+            default:
+                return 'unknown';
+        }
+    }
+
+    function checkNode(node) {
+        if (!node) return;
+
+        switch (node.type) {
+            case 'Program':
+                node.body.forEach(checkNode);
+                break;
+
+            case 'VariableDeclaration':
+                if (symbolTable[node.name]) {
+                    reportError(`Variable '${node.name}' ya declarada.`, node);
+                } else {
+                    const valueType = inferType(node.value);
+                    symbolTable[node.name] = valueType;
+                }
+                break;
+
+            case 'AssignmentExpression': {
+                const varName = node.left.name;
+                const assignedType = inferType(node.right);
+                const declaredType = symbolTable[varName];
+
+                if (!declaredType) {
+                    reportError(`Variable '${varName}' no declarada.`, node);
+                } else if (declaredType !== assignedType) {
+                    reportError(`Incompatibilidad de tipos: '${declaredType}' y '${assignedType}' para '${varName}'.`, node);
+                }
+                break;
+            }
+
+            case 'BinaryExpression':
+                checkNode(node.left);
+                checkNode(node.right);
+                break;
+
+            case 'ExpressionStatement':
+            case 'ReturnStatement':
+                checkNode(node.expr || node.argument);
+                break;
+
+            case 'IfStatement':
+                checkNode(node.test);
+                checkNode(node.consequent);
+                if (node.alternate) checkNode(node.alternate);
+                break;
+
+            case 'WhileStatement':
+            case 'ForStatement':
+                if (node.init) checkNode(node.init);
+                if (node.test) checkNode(node.test);
+                if (node.update) checkNode(node.update);
+                checkNode(node.body);
+                break;
+
+            case 'CallExpression':
+                if (node.callee.type === 'MemberExpression') {
+                    const objType = inferType(node.callee.object);
+                    const method = node.callee.property.name;
+
+                    const isValid =
+                        (objType === 'number' && method === 'toString') ||
+                        (objType === 'string' && method === 'toInt');
+
+                    if (!isValid) {
+                        reportError(`El método '${method}' no es válido para tipo '${objType}'.`, node);
+                    }
+                }
+
+                node.arguments.forEach(checkNode);
+                break;
+        }
+    }
+
+    checkNode(ast);
+    return errors;
+}
+
 function lexicalAnalysis(code) {
+    const tokenDefs = [
+        { type: 'COMMENT', regex: /^\/\/.*/, ignore: true },
+        { type: 'STRING', regex: /^"(?:[^"\\]|\\.)*"/ },
+        { type: 'STRING', regex: /^'(?:[^'\\]|\\.)*'/ },
+        { type: 'NUMBER', regex: /^\d+(\.\d+)?/ },
+        { type: 'IDENTIFIER', regex: /^[\p{L}_][\p{L}0-9_]*/u },
+        { type: 'OPERATOR', regex: /^(==|!=|<=|>=|\+\+|--|[+\-*/=<>])/ },
+        { type: 'DELIMITER', regex: /^[().,;{}[\]]/ },
+        { type: 'WHITESPACE', regex: /^\s+/, ignore: true }
+    ];
+
+    const lines = code.split('\n');
     const tokens = [];
     const errors = [];
 
-    // Eliminar comentarios tipo línea (// ...)
-    const codeWithoutComments = code.replace(/\/\/.*$/gm, '');
-
-    const lines = codeWithoutComments.split('\n');
-    const tokenRegex = /\w+|[^\s\w]/g;
-
     lines.forEach((line, lineNumber) => {
-        let match;
-        while ((match = tokenRegex.exec(line)) !== null) {
-            const lexeme = match[0];
-            const tokenType = identifyToken(lexeme);
+        let current = line;
+        let column = 1;
 
-            if (tokenType === 'UNKNOWN') {
+        while (current.length > 0) {
+            let matched = false;
+
+            for (const def of tokenDefs) {
+                const match = def.regex.exec(current);
+                if (match) {
+                    matched = true;
+                    if (!def.ignore) {
+                        tokens.push({
+                            lexeme: match[0],
+                            token: def.type,
+                            position: `[${lineNumber + 1}, ${column}]`
+                        });
+                    }
+                    column += match[0].length;
+                    current = current.slice(match[0].length);
+                    break;
+                }
+            }
+
+            if (!matched) {
                 errors.push({
                     type: 'Léxico',
-                    message: `Símbolo desconocido '${lexeme}' en línea ${lineNumber + 1}, columna ${match.index + 1}`
+                    message: `Símbolo no reconocido '${current[0]}' en línea ${lineNumber + 1}, columna ${column}`
                 });
-            } else {
-                tokens.push({
-                    lexeme,
-                    token: tokenType,
-                    position: `[${lineNumber + 1}, ${match.index + 1}]`
-                });
+                current = current.slice(1);
+                column++;
             }
         }
     });
@@ -81,45 +285,97 @@ function lexicalAnalysis(code) {
     return { tokens, errors };
 }
 
-function identifyToken(lexeme) {
-    if (/^\d+$/.test(lexeme)) return 'NUMBER';
+//  I'm letting this commented, in case you wanna do it in the future without the pegjs parser just hardcoding it to understand more of the process.
 
-    //  Permite letras con acentos y la ñ Ñ ü Ü
-    if (/^[a-zA-Z_áéíóúÁÉÍÓÚñÑüÜ]\w*$/.test(lexeme)) return 'IDENTIFIER';
+// function syntacticAnalysis(tokens) {
+//     const errors = [];
+//
+//     for (let i = 0; i < tokens.length; i++) {
+//         const token = tokens[i];
+//         const next = tokens[i + 1];
+//         const after = tokens[i + 2];
+//
+//         // Solo si es asignación IDENTIFIER = algo
+//         if (
+//             token.token === 'IDENTIFIER' &&
+//             next?.lexeme === '=' &&
+//             after
+//         ) {
+//             let foundEnd = false;
+//
+//             // Buscar el siguiente ;
+//             for (let j = i + 2; j < tokens.length; j++) {
+//                 const check = tokens[j];
+//                 if (check.lexeme === ';') {
+//                     foundEnd = true;
+//                     break;
+//                 }
+//
+//                 // Si cambia de línea o empieza bloque, termina análisis
+//                 if (check.lexeme === '}' || check.lexeme === '{' || check.token === 'Palabra Reservada') break;
+//             }
+//
+//             if (!foundEnd) {
+//                 errors.push({
+//                     type: 'Sintáctico',
+//                     message: `Asignación sin punto y coma en ${token.position}`
+//                 });
+//             }
+//         }
+//     }
+//
+//     return {parseTree: tokens, errors};
+// }
 
-    //  Reconoce símbolos comunes
-    if (/^[=+\-*/(){};,.<>&![\]:'"¿?]$/.test(lexeme)) return 'SYMBOL';
+// function semanticAnalysis(parseTree) {
+//     const errors = [];
+//     const symbolTable = {};
+//
+//     for (let i = 0; i < parseTree.length; i++) {
+//         const token = parseTree[i];
+//         if (token.token === 'IDENTIFIER' && parseTree[i + 1]?.lexeme === '=') {
+//             const valueToken = parseTree[i + 2];
+//             const id = token.lexeme;
+//             const value = valueToken?.lexeme || '';
+//             const valueType = /^[0-9]+$/.test(value) ? 'number' :
+//                 /^["'].*["']$/.test(value) ? 'string' : 'unknown';
+//
+//             if (symbolTable[id]) {
+//                 if (symbolTable[id] !== valueType) {
+//                     errors.push({
+//                         type: 'Semántico',
+//                         message: `Incompatibilidad de tipo: '${id}' ya es ${symbolTable[id]}, no puede asignarse ${valueType} en ${valueToken.position}`
+//                     });
+//                 }
+//             } else {
+//                 symbolTable[id] = valueType;
+//             }
+//         }
+//     }
+//
+//     return {errors};
+// }
 
-    return 'UNKNOWN';
-}
-
-
-
-// Función para mostrar los tokens en la tabla de símbolos
-function displayTokens(tokens) {
-    const tableBody = document.getElementById('symbolTable');
-    tableBody.innerHTML = '';
-    tokens.forEach(token => {
-        const row = document.createElement('tr');
-        row.innerHTML = `<td>${token.lexeme}</td><td>${token.token}</td><td>${token.position}</td>`;
-        tableBody.appendChild(row);
-    });
-}
-
-// Función para mostrar los errores detectados
+//
+// function displayTokens(tokens) {
+//     const tableBody = document.getElementById('symbolTable');
+//     tableBody.innerHTML = '';
+//     tokens.forEach(token => {
+//         const row = document.createElement('tr');
+//         row.innerHTML = `<td>${token.lexeme}</td><td>${token.token}</td><td>${token.position}</td>`;
+//         tableBody.appendChild(row);
+//     });
+// }
+//
 function displayErrors(errors) {
     const tableBody = document.getElementById('errorTable');
-    if (!tableBody) {
-        console.warn("No se encontró la tabla de errores.");
-        return;
-    }
-
-    tableBody.innerHTML = ''; // Limpiar contenido anterior
+    tableBody.innerHTML = '';
 
     if (!errors || errors.length === 0) {
         const row = document.createElement('tr');
         row.innerHTML = `<td colspan="2">Sin errores detectados</td>`;
         tableBody.appendChild(row);
+        logToConsole("Sin errores detectados.");
         return;
     }
 
@@ -127,177 +383,170 @@ function displayErrors(errors) {
         const row = document.createElement('tr');
         row.innerHTML = `<td>${error.type}</td><td>${error.message}</td>`;
         tableBody.appendChild(row);
+        logToConsole(`${error.type}: ${error.message}`, error.type === 'Sintáctico' ? 'error' : 'warning');
     });
 }
 
+function displaySymbolTable(tokens) {
+    const tableBody = document.getElementById('symbolTable');
+    tableBody.innerHTML = '';
 
-function syntacticAnalysis(tokens) {
-    const parseTree = [];
-    const errors = [];
-
-    // Simulación sencilla de error sintáctico
-    tokens.forEach((token, index) => {
-        if (token.token === 'SYMBOL' && token.lexeme === 'int') {
-            errors.push({
-                type: 'Sintáctico',
-                message: `Uso inesperado del símbolo '${token.lexeme}' en ${token.position}`
-            });
-        }
-    });
-
-    return { parseTree, errors };
-}
-
-
-function semanticAnalysis(parseTree) {
-    const errors = [];
-
-    const declaredVariables = ['x', 'i', 'suma', 'rango'];
-
-    parseTree.forEach(node => {
-        if (node.token === 'IDENTIFIER' && !declaredVariables.includes(node.lexeme)) {
-            errors.push({
-                type: 'Semántico',
-                message: `Uso de variable no declarada: '${node.lexeme}'`
-            });
-        }
-    });
-
-    return { errors };
-}
-
-
-// Función para traducir el código JavaScript a PHP
-function translateToPHP() {
-    setStatusBar("Traduciendo a PHP...");
-    const sourceCode = document.getElementById('sourceCode').value;
-    const translatedCode = jsToPhp(sourceCode);
-    document.getElementById('destinationCode').value = translatedCode;
-    setStatusBar("Traducción a PHP completada");
-    logToConsole("Traducción a PHP completada.");
-}
-
-// Función de conversión de JavaScript a PHP
-function jsToPhp(code) {
-    // Reemplazos básicos directos
-    const replacements = [
-        [/\b(var|let|const)\s+/g, '$'],
-        [/===/g, '=='],
-        [/!==/g, '!='],
-        [/\.toString\(\)/g, ''],
-        [/parseInt\s*\(([^)]+)\)/g, 'intval($1)'],
-        [/console\.log\s*\(([^)]+)\)/g, 'echo $1'],
-        [/([a-zA-Z0-9_]+)\.push\(([^)]+)\)/g, '$1[] = $2'],
-        [/([a-zA-Z0-9_$]+)\.split\(''\)\.reverse\(\)\.join\(''\)/g, 'strrev($1)'],
-        [/promptInput\(([^)]+)\)/g, '// promptInput($1) → usar fgets(STDIN)']
-    ];
-    for (const [pattern, replacement] of replacements) {
-        code = code.replace(pattern, replacement);
+    if (!tokens || tokens.length === 0) {
+        const row = document.createElement('tr');
+        row.innerHTML = `<td colspan="3">No se encontraron símbolos.</td>`;
+        tableBody.appendChild(row);
+        return;
     }
 
-    // Proteger strings y comentarios
-    const strings = {}, comments = {};
-    code = code.replace(/"[^"\n]*"|'[^'\n]*'/g, s => {
-        const k = `__S${Object.keys(strings).length}__`;
-        strings[k] = s;
-        return k;
+    tokens.forEach(token => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${token.lexeme || token.lexema}</td>
+            <td>${token.token}</td>
+            <td>${token.position || token.posicion}</td>
+        `;
+        tableBody.appendChild(row);
     });
-    code = code.replace(/\/\/[^\n]*/g, s => {
-        const k = `__C${Object.keys(comments).length}__`;
-        comments[k] = s;
-        return k;
-    });
-
-    // Funciones: asegurar que parámetros tienen $ y NO agregar $ al nombre
-    code = code.replace(/function\s+([a-zA-Z0-9_]+)\s*\((.*?)\)/g, (_, name, params) => {
-        const newParams = params
-            .split(',')
-            .map(p => p.trim())
-            .filter(Boolean)
-            .map(p => (p.startsWith('$') ? p : `$${p}`))
-            .join(', ');
-        return `function ${name}(${newParams})`;
-    });
-
-    // Palabras reservadas
-    const reserved = new Set([
-        'function','return','if','else','for','while','switch','case','break','continue',
-        'echo','true','false','null','strrev','intval','implode','array','isset','empty'
-    ]);
-
-    // Agregar $ a variables sueltas
-    code = code.replace(/\b[a-zA-Z_]\w*\b/g, (word, offset, fullText) => {
-        const prevChar = fullText[offset - 1];
-        const isFunctionDefinition = fullText.slice(offset - 9, offset) === 'function ';
-        if (
-            reserved.has(word) ||
-            word.startsWith('$') ||
-            word.startsWith('__') ||
-            /^\d+$/.test(word) ||
-            prevChar === '$' ||
-            isFunctionDefinition
-        ) {
-            return word;
-        }
-        return `$${word}`;
-    });
-
-    // Restaurar strings y comentarios
-    for (const [k, v] of Object.entries(strings)) code = code.replace(new RegExp(k, 'g'), v);
-    for (const [k, v] of Object.entries(comments)) code = code.replace(new RegExp(k, 'g'), v);
-
-    return `<?php\n\n${code.trim()}\n\n?>`;
 }
 
+function translateToRuby() {
+    setStatusBar("Traduciendo a Ruby...");
+    logToConsole("Iniciando traducción a Ruby...");
 
+    const sourceCode = document.getElementById('sourceCode').value;
+    const {errors} = lexicalAnalysis(sourceCode);
+    if (errors.length > 0) return displayErrors(errors);
 
+    const rubyCode = jsToRuby(sourceCode);
+    document.getElementById('destinationCode').value = rubyCode;
 
-// Función para traducir el código PHP a C
-function translateToC() {
-    setStatusBar("Traduciendo a C...");
-    const phpCode = document.getElementById('destinationCode').value;
-    const translatedCode = phpToC(phpCode);
-    document.getElementById('destinationCode').value = translatedCode;
-    setStatusBar("Traducción a C completada");
-    logToConsole("Traducción a C completada.");
+    logToConsole("Traducción a Ruby completada.", 'log');
+    setStatusBar("Traducción a Ruby completada.");
+}
+function clearErrors() {
+    const tableBody = document.getElementById('errorTable');
+    if (tableBody) {
+        tableBody.innerHTML = '';
+    }
 }
 
-// Función de conversión de PHP a C
-function phpToC(code) {
-    let cCode = `#include <stdio.h>\n\n`;
-    cCode += code
-        .replace(/<\?php/g, '')
-        .replace(/\?>/g, '')
-        .replace(/echo/g, 'printf')
-        .replace(/\$/g, '')
-        .replace(/==/g, '==')
-        .replace(/!=/g, '!=')
-        .replace(/;/g, ';')
-        .replace(/function /g, 'void ')
-        .replace(/printf\((.*?)\);/g, 'printf("%s", $1);');
-    return cCode;
+function jsToRuby(code) {
+    return code
+        // Comentarios JS → Ruby
+        .replace(/\/\/\s?(.*)/g, '# $1')
+
+        // Funciones
+        .replace(/function\s+([a-zA-Z_]\w*)\s*\((.*?)\)\s*{/g, 'def $1($2)')
+
+        // Cierre de bloques
+        .replace(/}/g, 'end')
+
+        // Variables: const, let, var → nada
+        .replace(/\b(const|let|var)\s+/g, '')
+
+        // Igualdad estricta
+        .replace(/===/g, '==')
+
+        // toString → to_s
+        .replace(/\.toString\(\)/g, '.to_s')
+
+        // parseInt → to_i
+        .replace(/parseInt\(([^,]+),\s*10\)/g, '$1.to_i')
+
+        // promptInput con const
+        .replace(/const\s+(\w+)\s*=\s*promptInput\((.*?)\)/g, 'print $2\n$1 = gets.chomp')
+
+        // promptInput sin const
+        .replace(/(\w+)\s*=\s*promptInput\((.*?)\)/g, 'print $2\n$1 = gets.chomp')
+
+        // push → <<
+        .replace(/([\w\]]+)\.push\((.*?)\)/g, '$1 << $2')
+
+        // for con let
+        .replace(/for\s*\(\s*let\s+(\w+)\s*=\s*(\d+);\s*\1\s*<=\s*(\w+);\s*\1\+\+\s*\)/g, 'for $1 in $2..$3')
+
+        // for sin let
+        .replace(/for\s*\(\s*(\w+)\s*=\s*(\d+);\s*\1\s*<=\s*(\w+);\s*\1\+\+\s*\)/g, 'for $1 in $2..$3')
+
+        // if simple
+        .replace(/if\s*\((.*?)\)\s*{/g, 'if $1')
+
+        // ✅ console.log("texto", variable) → interpolación
+        .replace(/console\.log\(\s*"([^"]+)"\s*,\s*([^)]+?)\s*\)/g, (_, text, variable) => {
+            return `puts "${text} #{${variable.trim()}}"`;
+        })
+
+        // ✅ console.log("texto " + variable)
+        .replace(/console\.log\(\s*"([^"]+)"\s*\+\s*([^)]+?)\s*\)/g, (_, text, variable) => {
+            return `puts "${text}" + ${variable.trim()}.to_s`;
+        })
+
+        // ✅ console.log(`texto ${variable}`)
+        .replace(/console\.log\(\s*`([^`]*?)\$\{(.*?)\}`\s*\)/g, (_, text, variable) => {
+            return `puts "${text}#{${variable.trim()}}"`;
+        })
+
+        // console.log(variable) simple
+        .replace(/console\.log\((.*?)\)/g, 'puts $1')
+
+        // Eliminar ;
+        .replace(/;/g, '')
+
+        // Eliminar {
+        .replace(/{/g, '')
+
+        // Limpiar saltos de línea innecesarios
+        .replace(/\n{2,}/g, '\n')
+
+        .trim();
 }
 
-// Función para abrir un archivo
+function translateRubyToGo() {
+    setStatusBar("Traduciendo Ruby a Go...");
+    logToConsole("Iniciando traducción Ruby -> Go...");
+
+    const rubyCode = document.getElementById('destinationCode').value;
+    if (!rubyCode.trim()) {
+        logToConsole("No hay código Ruby para traducir.", 'warning');
+        return;
+    }
+
+    const goCode = rubyToGo(rubyCode);
+    document.getElementById('destinationCode').value = goCode;
+    logToConsole("Traducción a Go completada.", 'log');
+    setStatusBar("Traducción a Go completada.");
+}
+
+function rubyToGo(code) {
+    return code
+        .replace(/#(.*)/g, '// $1')
+        .replace(/puts\s+"(.*?)\s*\#\{(.*?)\}"/g, 'fmt.Printf("$1%s\\n", $2)')
+        .replace(/puts\s+(.*)/g, 'fmt.Println($1)')
+        .replace(/def\s+(\w+)\((.*?)\)/g, 'func $1($2) {')
+        .replace(/end/g, '}')
+        .replace(/true/g, 'true')
+        .replace(/false/g, 'false')
+        .replace(/nil/g, 'nil');
+}
+
 function openFile() {
     const fileInput = document.getElementById('fileInput');
     fileInput.click();
-    fileInput.addEventListener('change', function() {
+    fileInput.addEventListener('change', function () {
         const file = fileInput.files[0];
         const reader = new FileReader();
-        reader.onload = function(e) {
+        reader.onload = function (e) {
             document.getElementById('sourceCode').value = e.target.result;
             setStatusBar("Archivo cargado");
             logToConsole("Archivo cargado correctamente.");
         };
         reader.readAsText(file);
-    }, { once: true });
+    }, {once: true});
 }
 
-// Función para guardar el contenido del área de texto de código fuente
 function saveFile() {
     const sourceCode = document.getElementById('sourceCode').value;
-    const blob = new Blob([sourceCode], { type: 'text/plain' });
+    const blob = new Blob([sourceCode], {type: 'text/plain'});
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = 'sourceCode.js';
@@ -306,85 +555,72 @@ function saveFile() {
     logToConsole("Archivo guardado correctamente.");
 }
 
-// Función para guardar el contenido del área de texto de código destino
 function saveAsFile() {
     const destinationCode = document.getElementById('destinationCode').value;
-    const blob = new Blob([destinationCode], { type: 'text/plain' });
+    const blob = new Blob([destinationCode], {type: 'text/plain'});
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = 'destinationCode.c';
+    a.download = 'destinationCode.rb';
     a.click();
     setStatusBar("Archivo guardado como...");
     logToConsole("Archivo guardado como correctamente.");
 }
 
-// Función para limpiar todas las áreas de texto y la consola
 function clearAll() {
-    // Limpiar las áreas de texto
     document.getElementById('sourceCode').value = '';
     document.getElementById('destinationCode').value = '';
-
-    // Limpiar tabla de errores (errorTable)
-    const errorTable = document.getElementById('errorTable');
-    if (errorTable) errorTable.innerHTML = '';
-
-    // Limpiar tabla de símbolos
-    const symbolTable = document.getElementById('symbolTable');
-    if (symbolTable) symbolTable.innerHTML = '';
-
-    // Limpiar consola
+    document.getElementById('errorTable').innerHTML = '';
+    document.getElementById('symbolTable').innerHTML = '';
     document.getElementById('console').innerText = '';
-
-    // Actualizar barra de estado y log
     setStatusBar("Todo limpio");
-    logToConsole("Todas las áreas y tablas han sido limpiadas correctamente.");
+    logToConsole("Todas las áreas y tablas han sido limpiadas correctamente.", 'log');
 }
 
-// Función para salir de la aplicación
 function exitApp() {
     if (confirm("¿Estás seguro de que deseas salir?")) {
         window.close();
     }
 }
 
-// Función para crear un nuevo archivo
 function newFile() {
     if (confirm("¿Deseas crear un nuevo archivo? Se perderán los cambios no guardados.")) {
         clearAll();
         setStatusBar("Nuevo archivo creado");
-        logToConsole("Nuevo archivo creado.");
+        logToConsole("Nuevo archivo creado.", 'log');
     }
 }
 
- // Función para ejecutar código JavaScript en un entorno controlado
 function runJavaScript() {
-    setStatusBar("Ejecutando JavaScript...");	
-    logToConsole("Ejecutando código JavaScript...");
-    const sourceCode = document.getElementById('sourceCode').value;
+    setStatusBar("Ejecutando código...");
+    logToConsole("Ejecutando...");
 
+    // Primero analiza el código
+    analyzeCode();
+
+    // Luego verifica si hay errores críticos
+    const errorTable = document.getElementById('errorTable');
+    const hasErrors = [...errorTable.querySelectorAll('tr')].some(row =>
+        row.innerText.includes('Léxico') ||
+        row.innerText.includes('Sintáctico') ||
+        row.innerText.includes('Semántico')
+    );
+
+    if (hasErrors) {
+        logToConsole("Ejecución detenida por errores críticos.", 'error');
+        setStatusBar("Errores detectados. No se ejecutó.");
+        return;
+    }
+
+    // Ejecutar si todo está bien
     try {
-        const inputSimulator = `
-        function promptInput(question) {
-            return prompt(question);
+        const code = document.getElementById('sourceCode').value;
+        const result = eval(code);
+        if (result !== undefined) {
+            logToConsole(`Resultado: ${result}`);
         }
-        `;
-
-        const fullCode = inputSimulator + sourceCode;
-        const result = eval(fullCode);
-
-        logToConsole("Resultado: " + result);
-        displayErrors([]); // Limpiar errores anteriores si todo salió bien
-        setStatusBar("Ejecución completada");
-    } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-
-        logToConsole("Error: " + errorMessage);
-        displayErrors([
-            {
-                type: "Semántico",
-                message: errorMessage
-            }
-        ]);
-        setStatusBar("Ejecución fallida");
+        setStatusBar("Ejecución completada.");
+    } catch (e) {
+        logToConsole(`Error de ejecución: ${e.message}`, 'error');
+        setStatusBar("Error al ejecutar.");
     }
 }

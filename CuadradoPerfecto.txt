@@ -17,3 +17,5 @@ function obtenerCuadradosPerfectos(hasta) {
 const rango = 100;
 const cuadradosPerfectos = obtenerCuadradosPerfectos(rango);
 cuadradosPerfectos;
+
+
