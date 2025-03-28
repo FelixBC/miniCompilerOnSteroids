@@ -151,7 +151,7 @@ Professor: Ivan Mendoza
 University: Universidad Tecnológica de Santiago (UTESA), Dominican Republic  
 
 *************************|
-Code for fun, by Félix.  |  
+Coded for fun, by Félix.  |  
 *************************|
 **************************
 ```
