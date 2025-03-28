@@ -1,7 +1,7 @@
 ## 📚 Índice
 
 - [🛠️ Language and Tools Used](#️-language-and-tools-used)
-- [✨ Key Features](#-key-features)
+- [⚙️ Key Features](#-key-features)
 - [📂 File Structure](#-file-structure)
 - [🔧 Installation and Setup Guide](#-installation-and-setup-guide)
 - [🚧 Known Issues and Future Improvements](#-known-issues-and-future-improvements)
