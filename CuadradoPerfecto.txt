@@ -1,3 +1,6 @@
+function promptInput(msg) {
+    return prompt(msg);
+}
 // Función para comprobar si un número es un cuadrado perfecto
 function esCuadradoPerfecto(num) {
     const raiz = Math.sqrt(num);
@@ -7,15 +10,21 @@ function esCuadradoPerfecto(num) {
 // Función para obtener todos los cuadrados perfectos en un rango dado
 function obtenerCuadradosPerfectos(hasta) {
     const cuadrados = [];
-    for (let i = 1; i * i <= hasta; i++) {
+    // Declarar 'i' fuera del for para evitar problemas de sintaxis en el compilador
+    let i = 1;
+    // Usar un for sin la declaración de 'i' dentro
+    for (; i * i <= hasta; i++) {
         cuadrados.push(i * i);
     }
     return cuadrados;
 }
 
-// Ejecutar
-const rango = 100;
-const cuadradosPerfectos = obtenerCuadradosPerfectos(rango);
-cuadradosPerfectos;
+// Simular entrada de datos
+const entrada = promptInput("Introduce el número máximo para calcular cuadrados perfectos:");
+const rango = parseInt(entrada, 10);
 
+// Mostrar resultados
+const cuadradosPerfectos = obtenerCuadradosPerfectos(rango);
+console.log("Los cuadrados perfectos son: " + cuadradosPerfectos);
+cuadradosPerfectos;
 

@@ -162,17 +162,20 @@ function semanticAnalysis(ast) {
                 node.body.forEach(checkNode);
                 break;
 
-            case 'VariableDeclaration':
-                if (symbolTable[node.name]) {
-                    reportError(`Variable '${node.name}' ya declarada.`, node);
+            case 'VariableDeclaration': {
+                // Extract the variable name (if node.name is an object, use its 'name' property)
+                const varName = (typeof node.name === "object" && node.name.name) ? node.name.name : node.name;
+                if (symbolTable[varName]) {
+                    reportError(`Variable '${varName}' ya declarada.`, node);
                 } else {
-                    const valueType = inferType(node.value);
-                    symbolTable[node.name] = valueType;
+                    symbolTable[varName] = inferType(node.value);
                 }
                 break;
+            }
 
             case 'AssignmentExpression': {
-                const varName = node.left.name;
+                // Extract variable name from left-hand side (if it's an Identifier object)
+                const varName = (typeof node.left === "object" && node.left.name) ? node.left.name : node.left;
                 const assignedType = inferType(node.right);
                 const declaredType = symbolTable[varName];
 
@@ -211,25 +214,28 @@ function semanticAnalysis(ast) {
             case 'CallExpression':
                 if (node.callee.type === 'MemberExpression') {
                     const objType = inferType(node.callee.object);
-                    const method = node.callee.property.name;
-
+                    // Extract property name if it's an Identifier object
+                    const method = (typeof node.callee.property === "object" && node.callee.property.name)
+                        ? node.callee.property.name
+                        : node.callee.property;
                     const isValid =
                         (objType === 'number' && method === 'toString') ||
                         (objType === 'string' && method === 'toInt');
-
                     if (!isValid) {
                         reportError(`El método '${method}' no es válido para tipo '${objType}'.`, node);
                     }
                 }
-
                 node.arguments.forEach(checkNode);
                 break;
+
+            // Add more cases if needed.
         }
     }
 
     checkNode(ast);
     return errors;
 }
+
 
 function lexicalAnalysis(code) {
     const tokenDefs = [
@@ -426,8 +432,7 @@ function translateToRuby() {
     const {errors} = lexicalAnalysis(sourceCode);
     if (errors.length > 0) return displayErrors(errors);
 
-    const rubyCode = jsToRuby(sourceCode);
-    document.getElementById('destinationCode').value = rubyCode;
+    document.getElementById('destinationCode').value = jsToRuby(sourceCode);
 
     logToConsole("Traducción a Ruby completada.", 'log');
     setStatusBar("Traducción a Ruby completada.");
@@ -521,8 +526,7 @@ function translateRubyToGo() {
         return;
     }
 
-    const goCode = rubyToGo(rubyCode);
-    document.getElementById('destinationCode').value = goCode;
+    document.getElementById('destinationCode').value = rubyToGo(rubyCode);
     logToConsole("Traducción a Go completada.", 'log');
     setStatusBar("Traducción a Go completada.");
 }
@@ -621,7 +625,6 @@ function runJavaScript() {
         return;
     }
 
-    // Ejecutar si todo está bien
     try {
         const code = document.getElementById('sourceCode').value;
         const result = eval(code);

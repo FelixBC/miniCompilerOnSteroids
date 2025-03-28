@@ -1,14 +1,19 @@
-// Función para comprobar si un número es capicúa (palíndromo numérico)
+function promptInput(message) {
+    return prompt(message);
+}
+
 function esCapicua(num) {
     const original = num.toString();
     const invertido = original.split('').reverse().join('');
     return original == invertido;
 }
 
-// Función para obtener todos los números capicúas en un rango dado
 function obtenerCapicuas(hasta) {
     const capicuas = [];
-    for (let i = 1; i <= hasta; i++) {
+    // Declarar 'i' fuera del for
+    let i = 1;
+    // Usar un for sin la declaración dentro
+    for (; i <= hasta; i++) {
         if (esCapicua(i)) {
             capicuas.push(i);
         }
@@ -16,12 +21,9 @@ function obtenerCapicuas(hasta) {
     return capicuas;
 }
 
-// Simular entrada de datos
 const entrada = promptInput("Introduce el número máximo del rango:");
 const rango = parseInt(entrada, 10);
 
-// Mostrar resultados
 const numerosCapicuas = obtenerCapicuas(rango);
 console.log("Los números capicúa son: " + numerosCapicuas);
 numerosCapicuas;
-
